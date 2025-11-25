@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 import os
+load_dotenv()
 
-app = FastAPI(title="ecoAgent API")
+#Database connection import
+from database.sessions import lifespan
+
+app = FastAPI(title="ecoAgent API", lifespan=lifespan)
 
 origins = [ os.getenv("FRONTEND_URL") ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
