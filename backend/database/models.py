@@ -16,13 +16,13 @@ class SessionModel(Base):
     __tablename__ = "sessions"
 
     session_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_profile = Column(JSONB, default={})
 
-    current_sector = Column(String, nullable=False)
+    current_sector = Column(String)
     summary_text = Column(Text, default="")
     summary_last_updated_at = Column(TIMESTAMP(timezone=True))
     missing_fields = Column(JSONB, default=list)
     sector_completion = Column(Boolean)
-    company_profile = Column(JSONB, default={})
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships -> Won't have to write JOINS manually
@@ -57,7 +57,6 @@ class StructuredField(Base):
     field_name = Column(String, nullable=False)
     field_value_float = Column(Float)
     field_value_text = Column(Text)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     session = relationship("SessionModel", back_populates="structured_fields")
 
@@ -91,6 +90,5 @@ class VectorMemory(Base):
     content = Column(Text, nullable=False)
     sector = Column(String, nullable=False)
     embedding = Column(Vector(1536), nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     session = relationship("SessionModel", back_populates="vectors")
