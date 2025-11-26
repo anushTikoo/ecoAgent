@@ -5,7 +5,7 @@ import os
 load_dotenv()
 
 #Database connection import
-from database.sessions import lifespan
+from database.session import lifespan
 
 app = FastAPI(title="ecoAgent API", lifespan=lifespan)
 
