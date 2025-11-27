@@ -14,7 +14,7 @@ class ChatFirstRequest(BaseModel):
 #SUBSEQUENT QUESTION REQUEST
 class ChatNextRequest(BaseModel):
     session_id: str
-    sector: str
+    category: str
     question: str
     answer: str
     missing_fields: Optional[List[Dict[str, Any]]] = []
@@ -22,8 +22,8 @@ class ChatNextRequest(BaseModel):
 #LLM RESPONSE MODEL
 class ChatLLMResponse(BaseModel):
     next_question: Optional[str]
-    sector_complete: bool
-    next_sector: Optional[str]
+    category_complete: bool
+    next_category: Optional[str]
     analysis_complete: bool
     updated_missing_field: Optional[List[Dict[str, Any]]]
     extracted_fields: Optional[List[Dict[str, Any]]]

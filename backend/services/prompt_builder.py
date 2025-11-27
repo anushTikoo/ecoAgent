@@ -8,8 +8,8 @@ def build_prompt1(data: dict) -> str:
     summary = json.dumps(data.get("summary", ""))
     relevant_qa = json.dumps(data.get("relevant_qa", []))
     missing_fields = json.dumps(data.get("missing_fields", []))
-    current_sector = json.dumps(data.get("current_sector", None))
-    qa_in_sector = json.dumps(data.get("qa_in_sector", []))
+    current_category = json.dumps(data.get("current_category", None))
+    qa_in_category = json.dumps(data.get("qa_in_category", []))
     last_qa = json.dumps(data.get("last_qa", []))
 
     return f"""
@@ -24,9 +24,45 @@ def build_prompt1(data: dict) -> str:
     <goal>
         1) Generate the NEXT QUESTION (<=30 words).
         2) Extract structured fields from the last Q/A.
-        3) Update sector completion, analysis completion, and missing_fields.
+        3) Update category completion, analysis completion, and missing_fields.
         4) Follow all rules exactly and output only valid JSON as specified.
     </goal>
+
+    <category_reference_examples>
+        ALWAYS align categories with GHG Protocol scopes.
+
+        IMPORTANT:
+        **Select categories ONLY if they logically apply to the company's operations,
+        based strictly on the provided company_profile.
+        Do NOT include irrelevant categories.**
+
+        Use standard examples like:
+
+        **Scope 1 (Direct)**
+        - Stationary Combustion (generators, boilers)
+        - Mobile Combustion (company vehicles)
+        - Fugitive Emissions (AC/cooling refrigerants)
+        - Process Emissions
+
+        **Scope 2 (Energy)**
+        - Purchased Electricity
+        - Purchased Heating/Steam
+        - Purchased Cooling (HVAC, district cooling)
+
+        **Scope 3 (Value Chain)**
+        - Purchased Goods & Raw Materials
+        - Capital Goods (equipment, machinery, office hardware)
+        - Fuel- & Energy-Related Activities (T&D losses)
+        - Upstream Transportation & Distribution
+        - Waste (solid waste, recycling, landfill)
+        - Water & Wastewater
+        - Business Travel
+        - Employee Commuting
+        - Purchased Services
+        - Use of Sold Products
+        - End-of-Life Treatment
+        - Other upstream/downstream services
+    </category_reference_examples>
 
     <extracted_fields_rules>
         - Use this schema exactly for each extracted field:
@@ -46,20 +82,20 @@ def build_prompt1(data: dict) -> str:
         - If nothing to extract, return an empty array.
     </extracted_fields_rules>
 
-    <sector_completion_rules>
-        - sector_complete = true ONLY IF all necessary questions to compute
-          Scope 1/2/3 emissions for CURRENT sector have been asked.
-    </sector_completion_rules>
+    <category_completion_rules>
+        - category_complete = true ONLY IF all necessary questions to compute
+          Scope 1/2/3 emissions for CURRENT category have been asked.
+    </category_completion_rules>
 
     <analysis_completion_rules>
-        - analysis_complete = true ONLY IF all sectors are completed per summary.
+        - analysis_complete = true ONLY IF all categories are completed per summary.
     </analysis_completion_rules>
 
-    <next_sector_rules>
-        - Return next_sector ONLY IF current sector is complete or empty AND analysis is NOT complete.
-        - Otherwise next_sector = null.
-        - When sector_complete and you give next_sector, generate the next question from the next sector immediately in the same response unless analysis is complete in that case give next_question = null.
-    </next_sector_rules>
+    <next_category_rules>
+        - Return next_category ONLY IF current category is complete or empty AND analysis is NOT complete.
+        - Otherwise next_category = null.
+        - When category_complete and you give next_category, generate the next question from the next category immediately in the same response unless analysis is complete in that case give next_question = null.
+    </next_category_rules>
 
     <missing_fields_rules>
         - If missing_fields provided and you ask a question covering a missing field,
@@ -71,9 +107,9 @@ def build_prompt1(data: dict) -> str:
         {{
             "company_profile": {company_profile},
             "summary": {summary},
-            "current_sector": {current_sector},
+            "current_category": {current_category},
             "relevant_qa": {relevant_qa},
-            "qa_in_sector": {qa_in_sector},
+            "qa_in_category": {qa_in_category},
             "last_qa": {last_qa},
             "missing_fields": {missing_fields}
         }}
@@ -86,8 +122,8 @@ def build_prompt1(data: dict) -> str:
         ```json
         {{
           "next_question": "string (max 30 words)",
-          "sector_complete": true or false,
-          "next_sector": null or "string",
+          "category_complete": true or false,
+          "next_category": null or "string",
           "analysis_complete": true or false,
           "updated_missing_field": [],
           "extracted_fields": [
@@ -140,7 +176,7 @@ def build_prompt2(data: dict) -> str:
 
 def build_prompt3A(data: dict) -> str:
     summary = data["summary"]
-    sector = data["sector"]
+    category = data["category"]
     structured_fields = data["structured_fields"]
     correction_note = data.get("correction_note", None)
 
@@ -152,7 +188,7 @@ def build_prompt3A(data: dict) -> str:
 
     instructions...
 
-    {sector}
+    {category}
     {summary}
     {structured_fields}
     {correction_note}

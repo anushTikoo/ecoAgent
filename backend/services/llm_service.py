@@ -57,8 +57,8 @@ async def ask_model(prompt: str) -> dict:
         return {
             "__llm_raw_text": raw,
             "next_question": "",
-            "sector_complete": False,
-            "next_sector": None,
+            "category_complete": False,
+            "next_category": None,
             "analysis_complete": False,
             "updated_missing_field": [],
             "extracted_fields": []
@@ -70,8 +70,8 @@ async def ask_model(prompt: str) -> dict:
         return {
             "__llm_error": str(e),
             "next_question": "",
-            "sector_complete": False,
-            "next_sector": None,
+            "category_complete": False,
+            "next_category": None,
             "analysis_complete": False,
             "updated_missing_field": [],
             "extracted_fields": []
