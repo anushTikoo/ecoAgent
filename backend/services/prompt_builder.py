@@ -1,62 +1,128 @@
 #File for building prompts, no storing in db, no llm calls, just buidling
+import json
 
 def build_prompt1(data: dict) -> str:
-    profile = data["profile"]
-    summary = data.get("summary", "")
-    relevant_qa = data.get("relevant_qa", [])
-    missing_fields = data.get("missing_fields", [])
-    current_sector = data.get("current_sector", None)
-    qa_in_sector = data.get("qa_in_sector", [])
+    import json
 
-    prompt = f"""
-    identity ...
-    instructions..
-    {profile}
-    {summary}
-    {relevant_qa}
-    {missing_fields}
-    {relevant_qa}
-    {current_sector}
-    {qa_in_sector}
+    company_profile = json.dumps(data["company_profile"])
+    summary = json.dumps(data.get("summary", ""))
+    relevant_qa = json.dumps(data.get("relevant_qa", []))
+    missing_fields = json.dumps(data.get("missing_fields", []))
+    current_sector = json.dumps(data.get("current_sector", None))
+    qa_in_sector = json.dumps(data.get("qa_in_sector", []))
+    last_qa = json.dumps(data.get("last_qa", []))
 
-    1. generate next question (cover scope 1, 2 and 3)
-    2. update sector completion flag if sector complete, if complete then also tell the next sector its going to ask
-       unless analyis complete
-    3. Extract STRUCTURED_FIELDS from the user's LAST ANSWER:
-         - entity_id (create new if needed) , e.g.: diesel_generator
-         - field_name, e.g.: number of hours operated(day)
-         - field_type, e.g: float/text
-         - field_value, e.g: 12
-    4. if all sectors complete and no more questions to ask then mark analysis completion flag
-    5. give updated_missing_field only if there was any missing field.
+    return f"""
+<eco_agent_instruction>
 
-    respond only in this JSON format:
-    {{
-        "next_question": "...",
-        "sector_complete": true/false,
-        "next_sector": null or "sector_name",
-        "analysis_complete": true/false,
-        "updated_missing_field": [...]
-        "extracted fields": [
-            {
-                "entity_id": "...",
-                "field_name": "...",
-                "field_type": "...",
-                "field_value_text": "...",
-                "field_vale_float": ...
-            }
-        ]
-    }}
-    """
+    <persona>
+        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
+        Prioritize clarity, schema compliance, and traceable outputs.
+        Tone: cordial, user-friendly. Use explicit units. Prefer to ask monthly, weekly or daily data.
+    </persona>
 
-    return prompt.strip()
+    <goal>
+        1) Generate the NEXT QUESTION (<=30 words).
+        2) Extract structured fields from the last Q/A.
+        3) Update sector completion, analysis completion, and missing_fields.
+        4) Follow all rules exactly and output only valid JSON as specified.
+    </goal>
+
+    <extracted_fields_rules>
+        - Use this schema exactly for each extracted field:
+          {{
+            "entity_id": "string",
+            "field_name": "string",
+            "field_type": "text" or "numeric",
+            "field_value_text": "string or null",
+            "field_value_float": float or null
+          }}
+        - RULE (mutual exclusivity): For each field, **exactly one** of
+          "field_value_text" or "field_value_float" MUST be non-null.
+          * If the extracted value is textual, set "field_value_text" to the string and
+            "field_value_float": null.
+          * If the extracted value is numeric, set "field_value_float" to the number and
+            "field_value_text": null.
+        - If nothing to extract, return an empty array.
+    </extracted_fields_rules>
+
+    <sector_completion_rules>
+        - sector_complete = true ONLY IF all necessary questions to compute
+          Scope 1/2/3 emissions for CURRENT sector have been asked.
+    </sector_completion_rules>
+
+    <analysis_completion_rules>
+        - analysis_complete = true ONLY IF all sectors are completed per summary.
+    </analysis_completion_rules>
+
+    <next_sector_rules>
+        - Return next_sector ONLY IF current sector is complete or empty AND analysis is NOT complete.
+        - Otherwise next_sector = null.
+        - When sector_complete and you give next_sector, generate the next question from the next sector immediately in the same response unless analysis is complete in that case give next_question = null.
+    </next_sector_rules>
+
+    <missing_fields_rules>
+        - If missing_fields provided and you ask a question covering a missing field,
+          remove it from updated_missing_field. Otherwise return the same list or an empty list.
+    </missing_fields_rules>
+
+    <input_context>
+        All context (JSON encoded):
+        {{
+            "company_profile": {company_profile},
+            "summary": {summary},
+            "current_sector": {current_sector},
+            "relevant_qa": {relevant_qa},
+            "qa_in_sector": {qa_in_sector},
+            "last_qa": {last_qa},
+            "missing_fields": {missing_fields}
+        }}
+    </input_context>
+
+    <output_format_strict>
+        MUST output ONLY valid JSON (no extra text). Use JSON booleans and null.
+        Follow this exact schema (example types shown):
+
+        ```json
+        {{
+          "next_question": "string (max 30 words)",
+          "sector_complete": true or false,
+          "next_sector": null or "string",
+          "analysis_complete": true or false,
+          "updated_missing_field": [],
+          "extracted_fields": [
+            {{
+              "entity_id": "string",
+              "field_name": "string",
+              "field_type": "text" or "numeric",
+              "field_value_text": "string or null",
+              "field_value_float": null or 123.45
+            }}
+          ]
+        }}
+        ```
+        IMPORTANT: For every item in extracted_fields, **exactly one**
+        of "field_value_text" or "field_value_float" must be non-null.
+    </output_format_strict>
+
+    <final_instruction>
+        RESPOND NOW WITH JSON ONLY.
+    </final_instruction>
+
+</eco_agent_instruction>
+""".strip()
+
 
 def build_prompt2(data: dict) -> str:
     previous_summary = data.get("previous_summary", "")
     recent_qa = data.get("recent_qa", [])
 
     prompt = f"""
-    identity ...
+    <base_persona>
+        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
+        Always prioritize clarity, schema compliance, and traceable outputs.
+    </base_persona>
+
     instructions..
     {previous_summary}
     {recent_qa}
@@ -79,7 +145,11 @@ def build_prompt3A(data: dict) -> str:
     correction_note = data.get("correction_note", None)
 
     prompt = f"""
-    identity...
+    <base_persona>
+        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
+        Always prioritize clarity, schema compliance, and traceable outputs.
+    </base_persona>
+
     instructions...
 
     {sector}
@@ -105,21 +175,16 @@ def build_prompt3A(data: dict) -> str:
     return prompt.strip()
 
 def build_prompt3B(data: dict) -> str:
-    """
-    Prompt 3B: Critique emissions + give confidence score.
-    Requires:
-        - identity
-        - instructions
-        - raw_emissions
-        - raw_calculation_steps
-        - structured_fields
-    """
     raw_emissions = data["raw_emissions"]
     raw_steps = data["raw_steps"]
     structured_fields = data["structured_fields"]
 
     prompt = f"""
-    identity...
+    <base_persona>
+        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
+        Always prioritize clarity, schema compliance, and traceable outputs.
+    </base_persona>
+
     instructions...
 
     {raw_emissions}
