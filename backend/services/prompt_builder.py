@@ -14,7 +14,6 @@ def build_prompt1(data: dict) -> str:
 
     return f"""
 <eco_agent_instruction>
-
     <persona>
         You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
         Prioritize clarity, schema compliance, and traceable outputs.
@@ -36,43 +35,25 @@ def build_prompt1(data: dict) -> str:
         based strictly on the provided company_profile.
         Do NOT include irrelevant categories.**
 
-        Use standard examples like:
-
-        **Scope 1 (Direct)**
+        Use standard examples like: (BUT also think of relevant categories on your own)
         - Stationary Combustion (generators, boilers)
         - Mobile Combustion (company vehicles)
-        - Fugitive Emissions (AC/cooling refrigerants)
         - Process Emissions
 
-        **Scope 2 (Energy)**
         - Purchased Electricity
-        - Purchased Heating/Steam
         - Purchased Cooling (HVAC, district cooling)
 
-        **Scope 3 (Value Chain)**
         - Purchased Goods & Raw Materials
         - Capital Goods (equipment, machinery, office hardware)
         - Fuel- & Energy-Related Activities (T&D losses)
         - Upstream Transportation & Distribution
         - Waste (solid waste, recycling, landfill)
-        - Water & Wastewater
-        - Business Travel
         - Employee Commuting
         - Purchased Services
-        - Use of Sold Products
-        - End-of-Life Treatment
         - Other upstream/downstream services
     </category_reference_examples>
 
     <extracted_fields_rules>
-        - Use this schema exactly for each extracted field:
-          {{
-            "entity_id": "string",
-            "field_name": "string",
-            "field_type": "text" or "numeric",
-            "field_value_text": "string or null",
-            "field_value_float": float or null
-          }}
         - RULE (mutual exclusivity): For each field, **exactly one** of
           "field_value_text" or "field_value_float" MUST be non-null.
           * If the extracted value is textual, set "field_value_text" to the string and
@@ -88,7 +69,7 @@ def build_prompt1(data: dict) -> str:
     </category_completion_rules>
 
     <analysis_completion_rules>
-        - analysis_complete = true ONLY IF all categories are completed per summary.
+        - analysis_complete = true ONLY IF all categories are completed (find out using summary).
     </analysis_completion_rules>
 
     <next_category_rules>
@@ -103,7 +84,6 @@ def build_prompt1(data: dict) -> str:
     </missing_fields_rules>
 
     <input_context>
-        All context (JSON encoded):
         {{
             "company_profile": {company_profile},
             "summary": {summary},
@@ -132,47 +112,72 @@ def build_prompt1(data: dict) -> str:
               "field_name": "string",
               "field_type": "text" or "numeric",
               "field_value_text": "string or null",
-              "field_value_float": null or 123.45
+              "field_value_float": null or float
             }}
           ]
         }}
         ```
-        IMPORTANT: For every item in extracted_fields, **exactly one**
-        of "field_value_text" or "field_value_float" must be non-null.
-    </output_format_strict>
-
-    <final_instruction>
-        RESPOND NOW WITH JSON ONLY.
-    </final_instruction>
-
 </eco_agent_instruction>
 """.strip()
-
 
 def build_prompt2(data: dict) -> str:
     previous_summary = data.get("previous_summary", "")
     recent_qa = data.get("recent_qa", [])
 
-    prompt = f"""
-    <base_persona>
-        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
-        Always prioritize clarity, schema compliance, and traceable outputs.
-    </base_persona>
+    return f"""
+<eco_agent_summary_update>
+    <persona>
+        You are EcoAgent — an accuracy-first AI specializing in carbon accounting.
+        Preserve all information while compressing wording aggressively.
+    </persona>
 
-    instructions..
-    {previous_summary}
-    {recent_qa}
+    <goal>
+        Update the running summary using the new Q/A.
 
-    Update the summary so it remains concise but complete.
-    NEVER lose previously included information.
+        CONTENT RULES:
+        - NEVER remove or lose any information that was in previous_summary.
+        - ALWAYS incorporate new info from recent_qa.
+        - Coverage must stay complete across all topics touched.
 
-    Respond ONLY as:
-    {{
-        "updated_summary": "..."
-    }}
-    """
+        STYLE RULES:
+        - Rewrite the whole summary into a shorter, simpler, high-level form.
+        - Use compact phrasing while still preserving every fact.
+        - No detailed numbers unless essential.
+        - Avoid speculation.
+    </goal>
 
-    return prompt.strip()
+    <input_data>
+        <previous_summary>
+            {previous_summary}
+        </previous_summary>
+
+        <recent_qa_json>
+            {recent_qa}
+        </recent_qa_json>
+    </input_data>
+
+    <output_requirements>
+        STRICT RULES:
+        1. Output ONLY valid JSON.
+        2. JSON schema:
+           {{
+             "updated_summary": "string"
+           }}
+        3. "updated_summary" must:
+           - contain ALL information from previous_summary,
+           - include new info from recent_qa,
+           - but expressed in a more compact, simplified form.
+    </output_requirements>
+
+    <output_delimiters>
+        When you respond, place the JSON object **between these exact markers**:
+        <<<JSON_START>>>
+        {{ ... }}
+        <<<JSON_END>>>
+        No extra text is permitted outside or between these markers.
+    </output_delimiters>
+</eco_agent_summary_update>
+""".strip()
 
 def build_prompt3A(data: dict) -> str:
     summary = data["summary"]

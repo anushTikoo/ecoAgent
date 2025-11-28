@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 class StartSessionInput(BaseModel):
     company_profile: dict  #JSONB
 
+
 #FIRST QUESTION REQUEST
 class ChatFirstRequest(BaseModel):
     session_id: str
@@ -27,3 +28,12 @@ class ChatLLMResponse(BaseModel):
     analysis_complete: bool
     updated_missing_field: Optional[List[Dict[str, Any]]]
     extracted_fields: Optional[List[Dict[str, Any]]]
+
+
+# --- SUMMARY MODELS ---
+class SummaryRequest(BaseModel):
+    session_id: str
+    category: str
+
+class SummaryResponse(BaseModel):
+    updated_summary: str
