@@ -35,6 +35,9 @@ def build_prompt1(data: dict) -> str:
         based strictly on the provided company_profile.
         Do NOT include irrelevant categories.**
 
+        Each category requires multiple questions. Do NOT stop at one question unless the category has been fully resolved
+        with all required data for emission calculation.
+
         Use standard examples like: (BUT also think of relevant categories on your own)
         - Stationary Combustion (generators, boilers)
         - Mobile Combustion (company vehicles)
@@ -66,6 +69,8 @@ def build_prompt1(data: dict) -> str:
     <category_completion_rules>
         - category_complete = true ONLY IF all necessary questions to compute
           Scope 1/2/3 emissions for CURRENT category have been asked.
+        - A category is NOT complete after one question. You MUST continue asking follow-up questions within the SAME category
+          until all required emission drivers for that category are collected.
     </category_completion_rules>
 
     <analysis_completion_rules>
@@ -183,36 +188,125 @@ def build_prompt3A(data: dict) -> str:
     summary = data["summary"]
     category = data["category"]
     structured_fields = data["structured_fields"]
-    correction_note = data.get("correction_note", None)
+    correction_note = data.get("correction_note", "")
 
     prompt = f"""
-    <base_persona>
-        You are EcoAgent — an accuracy-first AI specialized in carbon accounting.
-        Always prioritize clarity, schema compliance, and traceable outputs.
-    </base_persona>
+<eco_agent_calculation_instruction>
 
-    instructions...
+    <persona>
+        You are EcoAgent — an accuracy-first carbon accounting engine.
+        You strictly follow the GHG Protocol Corporate Standard.
+        You always output strict JSON.
+    </persona>
 
-    {category}
-    {summary}
-    {structured_fields}
-    {correction_note}
+    <input_context>
+        <category>{category}</category>
+        <summary>{summary}</summary>
+        <structured_fields>{structured_fields}</structured_fields>
+        <correction_note>{correction_note}</correction_note>
+    </input_context>
 
-    RULES:
-    - Convert ALL data to ANNUAL emissions (yearly CO₂e).
-    - Show ALL unit conversions (daily → weekly → yearly, etc.)
-    - Provide:
-        * raw_emissions (JSON)
-        * raw_calculation_steps (text)
-        * Correction Note in case wrong calculation (given by prompt 3B)
+    <ghg_protocol_core_rules>
+        <!-- 1. Scope Assignment -->
+        - Every emission must belong to EXACTLY one of:
+            "Scope 1", "Scope 2", "Scope 3".
+        - Rules:
+            * Scope 1 = owned/controlled combustion, vehicles, refrigerants.
+            * Scope 2 = purchased electricity/steam/heat/cooling.
+            * Scope 3 = all remaining value-chain categories (15 categories).
+        - If category is ambiguous → classify as Scope 3.
+        - NEVER invent a new scope.
 
-    Respond ONLY in this JSON shape:
+        <!-- 2. CO₂e Reporting -->
+        - All gases must be converted to CO₂e using IPCC GWP-100.
+        - FINAL output MUST ALWAYS be in **tonnes CO₂e per year (tCO₂e/yr)**.
 
-    {{
-        "raw_emissions": {{ ... }},
-        "raw_calculation_steps": "...",
-    }}
-    """
+        <!-- 3. Formula Rule -->
+        - Emissions = Activity Data x Emission Factor.
+        - No estimating missing activity data.
+
+        <!-- 4. Boundary Rule -->
+        - Assume Operational Control unless otherwise stated.
+
+        <!-- 5. No Double Counting -->
+        - Never double-count emissions inside the inventory.
+
+        <!-- 6. Electricity Rule -->
+        - If category relates to electricity:
+            * Always calculate location-based emissions.
+            * Calculate market-based emissions if contract data exists.
+            * Convert all results to **tonnes CO₂e/year**.
+
+        <!-- 7. Scope 3 Materiality -->
+        - If required data missing:
+            * raw_emissions = null
+            * raw_calculation_steps must list missing fields
+
+        <!-- 8. Offsets -->
+        - Offsets DO NOT reduce emissions.
+
+        <!-- 9. Emission Factors (MANDATORY COUNTRY-SPECIFIC) -->
+        - ALWAYS use **country-specific emission factors** when available.
+        - If the country is unknown or no specific EF exists:
+            * Use region-level factors (e.g., Asia, Europe) OR
+            * Use global default EF.
+        - MUST state the EF source explicitly (placeholder allowed).
+        - Regardless of EF source, ALWAYS convert final emissions to **tCO₂e/year**.
+
+        <!-- EF Stability Rule -->
+        - Always use the most specific emission factor available based on the input context.
+        - If no emission factor is provided in the input, infer the correct factor using the company’s country (from summary or company profile) before falling back to global defaults.
+        - Never change or switch emission factors once selected.
+        - Never mix energy-based and volume-based emission factor pathways in the same calculation.
+    </ghg_protocol_core_rules>
+
+    <calculation_requirements>
+        - Convert all activity data into **annual tonnes CO₂e**.
+        - Perform ALL unit conversions explicitly:
+            daily → monthly → yearly
+            liters → MJ (if applicable)
+            kg → tonnes
+        - Use country-specific EF from the provided summary/company country.
+        - Clearly show the formula used.
+        - Apply correction_note only where relevant.
+
+        - All arithmetic must be deterministic:
+            annual_value = monthly_value x 12
+            intermediate = annual_value x EF
+            result_tonnes = intermediate / 1000
+        - raw_emissions must equal result_tonnes within 1e-6 tolerance.
+        - If mismatch occurs, set raw_emissions = null and explain the mismatch in raw_calculation_steps.
+    </calculation_requirements>
+
+    <output_rules>
+        - Output MUST be valid JSON only.
+        - raw_emissions MUST be:
+            * a float representing **tCO₂e/year**, OR
+            * null if insufficient data.
+        - raw_calculation_steps must include:
+            * all conversion steps
+            * formulas
+            * emission factor references
+            * missing data (if any)
+        - scope must be EXACTLY:
+            "Scope 1", "Scope 2", or "Scope 3"
+        - No text outside the JSON object.
+    </output_rules>
+
+    <required_output_format>
+        {{
+            "scope": "Scope 1 or Scope 2 or Scope 3",
+            "raw_emissions": float or null,  # tonnes CO2e/year
+            "raw_calculation_steps": "string"
+        }}
+    </required_output_format>
+
+    <final_instruction>
+        Respond ONLY with the JSON object above.
+    </final_instruction>
+
+</eco_agent_calculation_instruction>
+"""
     return prompt.strip()
 
 def build_prompt3B(data: dict) -> str:

@@ -37,3 +37,15 @@ class SummaryRequest(BaseModel):
 
 class SummaryResponse(BaseModel):
     updated_summary: str
+
+
+# --- EMISSIONS MODELS (Prompt 3A) ---
+class EmissionsRequest(BaseModel):
+    session_id: str
+    category: str
+    correction_note: Optional[str] = None
+
+class EmissionsResponse(BaseModel):
+    scope: str
+    raw_emissions: float
+    raw_calculation_steps: str
